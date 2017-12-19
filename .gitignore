@@ -8,4 +8,5 @@
 
 # SBT
 *target/
-
+*.class
+*.log
