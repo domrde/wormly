@@ -16,11 +16,14 @@ object Boot extends App {
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   val config = system.settings.config
-  val interface = config.getString("application.http-binding-address")
-  val port = config.getInt("application.http-binding-port")
+  val interface = config.getString("application.http-binding.address")
+  val port = config.getInt("application.http-binding.port")
+
+  val gameCycle = system.actorOf(GameCycle.props())
+  val sequentialOperationsManager = system.actorOf(SequentialOperationsManager.props())
 
   val route: Route = path("ws") {
-    handleWebSocketMessages(ConnectionHandler.flow)
+    handleWebSocketMessages(ConnectionHandler.createActorHandlingFlow(gameCycle, sequentialOperationsManager))
   }
 
   val bindingFuture = Http().bindAndHandle(route, interface, port)

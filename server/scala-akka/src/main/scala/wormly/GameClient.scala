@@ -1,104 +1,78 @@
 package wormly
 
-import java.awt.Color
-
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-
-import scala.util.Random
+import akka.actor.{Actor, ActorLogging, ActorRef, PoisonPill, Props, Terminated}
 
 object GameClient {
 
   case class OutputActor(outputActor: ActorRef)
 
-  case class ChangeAngle(newAngle: Double)
+  def props(gameCycle: ActorRef, sequentialOperationsManager: ActorRef): Props =
+    Props(new GameClient(gameCycle, sequentialOperationsManager))
 
-  case class SnakePart(y: Double, x: Double)
-
-  case class IncreaseSize(foodValue: Double)
-
-  case class Update()
-
-  case class GetVisibleParts(upperBound: Double, leftBound: Double, lowerBound: Double, rightBound: Double)
-
-  case class VisibleParts(snakeParts: List[SnakePart], size: Double, color: Color)
-
-  case class ReinitSnake(initialY: Double, initialX: Double, initialAngle: Double)
-
-  def props(): Props = Props(new GameClient())
-
-  def randomCoordinate(min: Int, max: Int): Double = {
-    val delta = max - min
-    Random.nextInt(delta / 2) + (delta / 4)
-  }
 }
 
-class GameClient() extends Actor with ActorLogging {
-
+class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) extends Actor with ActorLogging {
   import GameClient._
 
-  private val config = context.system.settings.config
-  private val fieldHeight = config.getInt("application.game-field-height")
-  private val fieldWidth = config.getInt("application.game-field-width")
-  private val initialPartSize = config.getInt("application.initial-snake-part-size")
-  private val maximumPartSize = config.getInt("application.maximum-snake-part-size")
-  private val initialLength = config.getInt("application.initial-snake-length")
-  private val speed = config.getInt("application.snake-speed")
-
-  private val headColor: Color = new Color(Random.nextInt(255), Random.nextInt(255), Random.nextInt(255))
-
-  private def initSnake(initialY: Double, initialX: Double, initialAngle: Double): List[SnakePart] = {
-    val oppositeAngle = (initialAngle + 180) % 360
-    SnakePart(initialY, initialX) :: growParts(initialY, initialX, oppositeAngle, initialPartSize, initialLength - 1)
+  def mapVisibleObjects(in: SequentialOperationsManager.VisibleObjects): ConnectionHandler.VisibleObjectsOut = {
+    ConnectionHandler.VisibleObjectsOut(in.snakeParts.flatMap(mapSnakePart), in.food.map(mapFood))
   }
 
-  def growParts(y: Double, x: Double, angle: Double, size: Double, amount: Int): List[SnakePart] = {
-    val heightIncrement = size / 2.0 * Math.cos(Math.toRadians(angle))
-    val widthIncrement = size / 2.0 * Math.sin(Math.toRadians(angle))
-    (1 to amount).map { idx =>
-      SnakePart(
-        y + idx * heightIncrement,
-        x + idx * widthIncrement
-      )
-    }.toList
+  def mapFood(in: SequentialOperationsManager.Food): ConnectionHandler.FoodOut = {
+    ConnectionHandler.FoodOut(in.y, in.x, Utils.colorToString(in.color), in.value)
   }
 
-  def update(angle: Double, size: Double, snakeParts: List[SnakePart]): List[SnakePart] = {
-    growParts(snakeParts.head.y, snakeParts.head.x, angle, size, speed).reverse ::: snakeParts.dropRight(speed)
+  def mapSnakePart(in: SequentialOperationsManager.VisibleParts): List[ConnectionHandler.SnakePartOut] = {
+    in.snakeParts.map(part => ConnectionHandler.SnakePartOut(part.y, part.x, in.size, Utils.colorToString(in.color)))
   }
 
-  def filterVisibleParts(upperBound: Double, leftBound: Double, lowerBound: Double, rightBound: Double,
-                         size: Double, snakeParts: List[SnakePart]): List[SnakePart] = {
-    snakeParts.filter { case SnakePart(y, x) =>
-      upperBound < y + size && y - size < lowerBound &&
-        leftBound < x + size && x - size < rightBound
-    }
-  }
+  override def receive: Receive = receiveWithNoOutput
 
-  def receiveWithState(angle: Double, size: Double, snakeParts: List[SnakePart]): Receive = {
-    case ReinitSnake(y: Double, x: Double, a: Double) =>
-      context.become(receiveWithState(a, initialPartSize, initSnake(y, x, a)))
+  def receiveGameStarted(snakeState: ActorRef, output: ActorRef): Receive = {
+    case GameCycle.Tick =>
+      snakeState ! Snake.Update
 
-    case ChangeAngle(newAngle) =>
-      context.become(receiveWithState(newAngle, size, snakeParts), discardOld = true)
+    case s @ Snake.SnakeState(_, _, _) =>
+      sequentialOperationsManager ! s
 
-    case IncreaseSize(foodValue) =>
-      if (size < maximumPartSize) {
-        context.become(receiveWithState(angle, size * foodValue, snakeParts), discardOld = true)
-      }
+    case SequentialOperationsManager.Collision =>
+      snakeState ! PoisonPill
 
-    case Update() =>
-      context.become(receiveWithState(angle, size, update(angle, size, snakeParts)), discardOld = true)
+    case SequentialOperationsManager.Feeding(value) =>
+      snakeState ! Snake.IncreaseSize(value)
 
-    case GetVisibleParts(upperBound, leftBound, lowerBound, rightBound) =>
-      sender() ! VisibleParts(filterVisibleParts(upperBound, leftBound, lowerBound, rightBound, size, snakeParts), size, headColor)
+    case vo @ SequentialOperationsManager.VisibleObjects(_, _) =>
+      output ! mapVisibleObjects(vo)
+
+    case ConnectionHandler.CursorPositionIn(angle) =>
+      snakeState ! Snake.ChangeAngle(angle)
+
+    case Terminated(target) if target == snakeState =>
+      output ! ConnectionHandler.CollisionOut
+      context.become(receiveGameNotStarted(output), discardOld = true)
 
     case other =>
       log.error("Unexpected message {} from {}", other, sender())
   }
 
-  override def receive: Receive = {
-    val initialAngle = Random.nextInt(360)
-    receiveWithState(initialAngle, initialPartSize, initSnake(randomCoordinate(0, fieldWidth), randomCoordinate(0, fieldWidth), initialAngle))
+  def receiveGameNotStarted(output: ActorRef): Receive = {
+    case ConnectionHandler.StartGameIn =>
+      val snakeState = context.actorOf(Snake.props())
+      context.watch(snakeState)
+      context.become(receiveGameStarted(snakeState, output), discardOld = true)
+
+    case other =>
+      log.error("Unexpected message {} from {}", other, sender())
   }
 
+  val receiveWithNoOutput: Receive = {
+    case OutputActor(outputActor) =>
+      context.become(receiveGameNotStarted(outputActor), discardOld = true)
+
+    case other =>
+      log.error("Unexpected message {} from {}", other, sender())
+  }
+
+  sequentialOperationsManager ! SequentialOperationsManager.NewSnake
+  gameCycle ! GameCycle.ManageMe
 }

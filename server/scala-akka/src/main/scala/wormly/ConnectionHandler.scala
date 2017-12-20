@@ -1,7 +1,7 @@
 package wormly
 
 import akka.NotUsed
-import akka.actor.{ActorSystem, PoisonPill}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
@@ -13,21 +13,18 @@ import scala.util.Try
 object ConnectionHandler {
 
   sealed trait WsIncoming
-
-  case class StartGame(name: String) extends WsIncoming
-
-  case class CursorPosition(angle: Double) extends WsIncoming
+  case class StartGameIn(name: String) extends WsIncoming
+  case class CursorPositionIn(angle: Double) extends WsIncoming
 
   sealed trait WsOutgoing
+  case class FoodOut(y: Double, x: Double, color: String, value: Double)
+  case class SnakePartOut(y: Double, x: Double, r: Double, color: String)
+  case class VisibleObjectsOut(snakeParts: List[SnakePartOut], food: List[FoodOut]) extends WsOutgoing
+  case class CollisionOut() extends WsOutgoing
 
-  case class Food(y: Double, x: Double, color: String, value: Double)
-
-  case class SnakePart(y: Double, x: Double, r: Double, color: String)
-
-  case class VisibleObjects(snakeParts: List[SnakePart], food: List[Food]) extends WsOutgoing
-
-  def flow(implicit system: ActorSystem, materializer: ActorMaterializer, ec: ExecutionContext): Flow[Message, Message, Any] = {
-    val gameClient = system.actorOf(GameClient.props())
+  def createActorHandlingFlow(gameCycle: ActorRef, sequentialOperationsManager: ActorRef)
+                             (implicit system: ActorSystem, materializer: ActorMaterializer, ec: ExecutionContext): Flow[Message, Message, Any] = {
+    val gameClient = system.actorOf(GameClient.props(gameCycle, sequentialOperationsManager))
 
     val incomingMessages: Sink[Message, NotUsed] =
       Flow[Message].map {
