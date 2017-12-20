@@ -36,7 +36,6 @@ class Snake() extends Actor with ActorLogging {
   private val initialPartSize = config.getInt("application.initial-snake-part-size")
   private val maximumPartSize = config.getInt("application.maximum-snake-part-size")
   private val initialLength = config.getInt("application.initial-snake-length")
-  private val speed = config.getDouble("application.snake-speed")
   private val distanceBetweenParts = config.getDouble("application.distance-between-parts")
 
   private val headColor: Color = Utils.randomColor()
@@ -58,7 +57,7 @@ class Snake() extends Actor with ActorLogging {
   }
 
   def update(angle: Double, size: Double, snakeParts: List[SnakePart]): List[SnakePart] = {
-    growParts(snakeParts.head.y, snakeParts.head.x, angle, size, speed).reverse ::: snakeParts.dropRight(speed)
+    growParts(snakeParts.head.y, snakeParts.head.x, angle, size, 1).reverse ::: snakeParts.dropRight(1)
   }
 
   def receiveWithState(angle: Double, size: Double, snakeParts: List[SnakePart]): Receive = {

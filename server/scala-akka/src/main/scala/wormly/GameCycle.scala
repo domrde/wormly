@@ -16,8 +16,10 @@ class GameCycle extends Actor with ActorLogging {
   import GameCycle._
 
   override def receive: Receive = receiveWithClients(Set.empty)
+  private val config = context.system.settings.config
+  private val timeout = config.getInt("application.game-cycle-timeout-millis")
 
-  context.system.scheduler.schedule(0 millis, 1 second, self, Tick)
+  context.system.scheduler.schedule(0 millis, timeout millis, self, Tick)
 
   def receiveWithClients(clients: Set[ActorRef]): Receive = {
     case Tick =>

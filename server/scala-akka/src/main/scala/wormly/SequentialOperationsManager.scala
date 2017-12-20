@@ -5,6 +5,8 @@ import java.awt.Color
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
 import wormly.Snake.{SnakePart, SnakeState}
 
+import scala.util.Random
+
 object SequentialOperationsManager {
 
   case object NewSnake
@@ -26,6 +28,8 @@ class SequentialOperationsManager extends Actor with ActorLogging {
 
   private val config = context.system.settings.config
   private val foodValueToDiameterCoefficient = config.getDouble("application.food-value-to-diameter-coefficient")
+  private val fieldHeight = config.getInt("application.game-field-height")
+  private val fieldWidth = config.getInt("application.game-field-width")
 
   def areCollide(partA: SnakePart, sizeA: Double, partB: SnakePart, sizeB: Double): Boolean = {
     val radA = sizeA / 2.0
@@ -41,23 +45,17 @@ class SequentialOperationsManager extends Actor with ActorLogging {
     Math.pow(radA - foodRadius, 2.0) <= radiusSum && radiusSum <= Math.pow(radA + foodRadius, 2.0)
   }
 
-  def sendCollisionMessages(snakes: Map[ActorRef, SnakeState]): Unit = {
+  def findCollidingSnakes(snakes: Map[ActorRef, SnakeState]): Map[ActorRef, SnakeState] = {
     snakes.filter { case (_, snakeA) =>
       snakes.values.exists { snakeB =>
         snakeB.snakeParts.tail.exists(part => areCollide(snakeA.snakeParts.head, snakeA.size, part, snakeB.size))
       }
-    }.foreach { case (snake, _) => snake ! Collision }
-    // todo: remove from drawing
+    }
   }
 
-  def sendFeedingMessages(snakes: Map[ActorRef, SnakeState], food: List[Food]): Unit = {
-    snakes.foreach { case (actor, snakeA) =>
-      food.foreach { food =>
-        if (areCollide(snakeA.snakeParts.head, snakeA.size, food)) {
-          actor ! Feeding(food.value)
-          // todo: send message to delete food
-        }
-      }
+  def findEatenFood(snakes: Map[ActorRef, SnakeState], food: List[Food]): Map[ActorRef, Food] = {
+    snakes.flatMap { case (actor, snakeA) =>
+      food.filter { food => areCollide(snakeA.snakeParts.head, snakeA.size, food) }.map(eatenFood => (actor, eatenFood))
     }
   }
 
@@ -98,24 +96,50 @@ class SequentialOperationsManager extends Actor with ActorLogging {
     }
   }
 
-  override def receive: Receive = waitingForStateUpdate(Map.empty, List.empty, Set.empty)
+  def generateFoodForSnakePart(deadSnakePart: Snake.SnakePart, size: Double, color: Color): List[Food] = {
+    val lowerBound = deadSnakePart.y - size / 2.0
+    val leftBound = deadSnakePart.x - size / 2.0
+    (1 until size.round).map { _ =>
+      Food(lowerBound + Random.nextInt(size.toInt), leftBound + Random.nextInt(size.toInt), color, Random.nextDouble())
+    }.toList
+  }
 
-  def waitingForStateUpdate(snakes: Map[ActorRef, SnakeState], food: List[Food], waitingList: Set[ActorRef]): Receive = {
+  def generateFood(collidingSnakes: Map[ActorRef, SnakeState], amountToGenerate: Int): List[Food] = {
+    collidingSnakes.flatMap { case (_, snake) =>
+      snake.snakeParts.flatMap { part =>
+        generateFoodForSnakePart(part, snake.size, snake.color)
+      }
+    } ++
+    (1 to amountToGenerate).map { _ =>
+      Food(Random.nextInt(fieldHeight), Random.nextInt(fieldWidth), Utils.randomColor(), Random.nextDouble())
+    }
+  }.toList
+
+  override def receive: Receive = waitingForStateUpdate(Map.empty, generateFood(Map.empty, 100), Set.empty)
+
+  def waitingForStateUpdate(snakes: Map[ActorRef, SnakeState], foodList: List[Food], waitingList: Set[ActorRef]): Receive = {
     case NewSnake =>
       context.watch(sender())
 
     case Terminated(target) =>
-      context.become(waitingForStateUpdate(snakes - target, food, waitingList - target), discardOld = true)
+      context.become(waitingForStateUpdate(snakes - target, foodList, waitingList - target), discardOld = true)
 
     case s @ Snake.SnakeState(_, _, _) =>
       val newWaitingList = waitingList - sender()
       if (newWaitingList.isEmpty) {
-        context.become(waitingForStateUpdate(snakes + (sender() -> s), food, snakes.keySet), discardOld = true)
-        sendCollisionMessages(snakes)
-        sendFeedingMessages(snakes, food)
-        sendVisibleObjects(snakes, food)
+        val collidingSnakes = findCollidingSnakes(snakes)
+        collidingSnakes.keys.foreach(_ ! Collision)
+
+        val eatenFood = findEatenFood(snakes, foodList)
+        eatenFood.foreach { case (actor, food) => actor ! Feeding(food.value)}
+
+        val newSnakes = (snakes + (sender() -> s)) -- collidingSnakes.keys
+        val newFood = generateFood(collidingSnakes, eatenFood.size)
+
+        context.become(waitingForStateUpdate(newSnakes, newFood, newSnakes.keySet), discardOld = true)
+        sendVisibleObjects(snakes, foodList)
       } else {
-        context.become(waitingForStateUpdate(snakes + (sender() -> s), food, newWaitingList), discardOld = true)
+        context.become(waitingForStateUpdate(snakes + (sender() -> s), foodList, newWaitingList), discardOld = true)
       }
 
     case other =>
