@@ -11,13 +11,13 @@ object SequentialOperationsManager {
 
   case object NewSnake
 
-  case class Food(y: Double, x: Double, color: Color, value: Double)
+  case class Food(y: Double, x: Double, color: Color, value: Double, d: Double)
   case object Collision
   case class Feeding(foodValue: Double)
 
   case class VisibilityWindow(upperBound: Double, leftBound: Double, lowerBound: Double, rightBound: Double)
   case class VisibleParts(snakeParts: List[SnakePart], size: Double, color: Color)
-  case class VisibleObjects(snakeParts: List[VisibleParts], food: List[Food])
+  case class VisibleObjects(snakeParts: List[VisibleParts], food: List[Food], offsetY: Double, offsetX: Double)
 
   def props(): Props = Props(new SequentialOperationsManager())
 }
@@ -30,6 +30,7 @@ class SequentialOperationsManager extends Actor with ActorLogging {
   private val foodValueToDiameterCoefficient = config.getDouble("application.food-value-to-diameter-coefficient")
   private val fieldHeight = config.getInt("application.game-field-height")
   private val fieldWidth = config.getInt("application.game-field-width")
+  private val initialAmountOfFood = config.getInt("application.initial-amount-of-food")
 
   def areCollide(partA: SnakePart, sizeA: Double, partB: SnakePart, sizeB: Double): Boolean = {
     val radA = sizeA / 2.0
@@ -39,16 +40,16 @@ class SequentialOperationsManager extends Actor with ActorLogging {
   }
 
   def areCollide(partA: SnakePart, sizeA: Double, food: Food): Boolean = {
-    val foodRadius = food.value * foodValueToDiameterCoefficient / 2.0
+    val foodRadius = food.d / 2.0
     val radA = sizeA / 2.0
     val radiusSum = Math.pow(partA.x - food.x, 2.0) + Math.pow(partA.y - food.y, 2.0)
     Math.pow(radA - foodRadius, 2.0) <= radiusSum && radiusSum <= Math.pow(radA + foodRadius, 2.0)
   }
 
   def findCollidingSnakes(snakes: Map[ActorRef, SnakeState]): Map[ActorRef, SnakeState] = {
-    snakes.filter { case (_, snakeA) =>
-      snakes.values.exists { snakeB =>
-        snakeB.snakeParts.tail.exists(part => areCollide(snakeA.snakeParts.head, snakeA.size, part, snakeB.size))
+    snakes.filter { case (actorA, snakeA) =>
+      snakes.exists { case (actorB, snakeB) =>
+        actorA != actorB && snakeB.snakeParts.tail.exists(part => areCollide(snakeA.snakeParts.head, snakeA.size, part, snakeB.size))
       }
     }
   }
@@ -68,8 +69,8 @@ class SequentialOperationsManager extends Actor with ActorLogging {
   }
 
   def filterVisibleFood(window: VisibilityWindow, food: List[Food]): List[Food] = {
-    food.filter { case Food(y, x, _, v) =>
-      val foodRadius = v * foodValueToDiameterCoefficient / 2.0
+    food.filter { case Food(y, x, _, _, d) =>
+      val foodRadius = d / 2.0
       window.upperBound < y + foodRadius && y - foodRadius < window.lowerBound &&
         window.leftBound < x + foodRadius && x - foodRadius < window.rightBound
     }
@@ -77,22 +78,23 @@ class SequentialOperationsManager extends Actor with ActorLogging {
 
   // todo: get canvas size from client
   def calculateVisibilityWindowBasedOnSnakeSize(snake: SnakeState): VisibilityWindow = {
-    val height = 600
-    val width = 800
+    val height = 726
+    val width = 1280
     VisibilityWindow(
-      upperBound = snake.snakeParts.head.y - 20 * snake.size,
-      leftBound = snake.snakeParts.head.y - 20 * snake.size,
-      lowerBound = snake.snakeParts.head.y + 20 * width / height * snake.size,
-      rightBound = snake.snakeParts.head.y - 20 * width / height * snake.size
+      upperBound = snake.snakeParts.head.y - 10 * snake.size,
+      leftBound = snake.snakeParts.head.x - 10 * width / height * snake.size,
+      lowerBound = snake.snakeParts.head.y + 10 * snake.size,
+      rightBound = snake.snakeParts.head.x + 10 * width / height * snake.size
     )
   }
 
   def sendVisibleObjects(snakes: Map[ActorRef, SnakeState], food: List[Food]): Unit = {
     snakes.foreach { case (actor, snake) =>
       val window = calculateVisibilityWindowBasedOnSnakeSize(snake)
+      log.debug("Window for {} is {}:", actor, window)
       val visibleParts = snakes.map { case (_, otherSnake) => filterVisibleParts(window, otherSnake) }.toList
       val visibleFood = filterVisibleFood(window, food)
-      actor ! VisibleObjects(visibleParts, visibleFood)
+      actor ! VisibleObjects(visibleParts, visibleFood, snake.snakeParts.head.y, snake.snakeParts.head.x)
     }
   }
 
@@ -100,7 +102,9 @@ class SequentialOperationsManager extends Actor with ActorLogging {
     val lowerBound = deadSnakePart.y - size / 2.0
     val leftBound = deadSnakePart.x - size / 2.0
     (1 until size.toInt).map { _ =>
-      Food(lowerBound + Random.nextInt(size.toInt), leftBound + Random.nextInt(size.toInt), color, Random.nextDouble())
+      val value = Random.nextDouble()
+      val diam = value * foodValueToDiameterCoefficient
+      Food(lowerBound + Random.nextInt(size.toInt), leftBound + Random.nextInt(size.toInt), color, value, diam)
     }.toList
   }
 
@@ -111,22 +115,28 @@ class SequentialOperationsManager extends Actor with ActorLogging {
       }
     } ++
     (1 to amountToGenerate).map { _ =>
-      Food(Random.nextInt(fieldHeight), Random.nextInt(fieldWidth), Utils.randomColor(), Random.nextDouble())
+      val value = Random.nextDouble()
+      val diam = value * foodValueToDiameterCoefficient
+      Food(Random.nextInt(fieldHeight), Random.nextInt(fieldWidth), Utils.randomColor(), value, diam)
     }
   }.toList
 
-  override def receive: Receive = waitingForStateUpdate(Map.empty, generateFood(Map.empty, 100), Set.empty)
+  override def receive: Receive = waitingForStateUpdate(Map.empty, generateFood(Map.empty, initialAmountOfFood), Set.empty)
 
   def waitingForStateUpdate(snakes: Map[ActorRef, SnakeState], foodList: List[Food], waitingList: Set[ActorRef]): Receive = {
     case NewSnake =>
+      log.debug("New snake created {}", sender())
       context.watch(sender())
 
     case Terminated(target) =>
+      log.debug("Snake terminated {}", target)
+      context.unwatch(target)
       context.become(waitingForStateUpdate(snakes - target, foodList, waitingList - target), discardOld = true)
 
     case s @ Snake.SnakeState(_, _, _) =>
       val newWaitingList = waitingList - sender()
       if (newWaitingList.isEmpty) {
+        log.debug("Snake state updated. Calculating client data")
         val collidingSnakes = findCollidingSnakes(snakes)
         collidingSnakes.keys.foreach(_ ! Collision)
 
@@ -137,8 +147,9 @@ class SequentialOperationsManager extends Actor with ActorLogging {
         val newFood = generateFood(collidingSnakes, eatenFood.size)
 
         context.become(waitingForStateUpdate(newSnakes, newFood, newSnakes.keySet), discardOld = true)
-        sendVisibleObjects(snakes, foodList)
+        sendVisibleObjects(newSnakes, newFood)
       } else {
+        log.debug("Snake state updated. Waiting for clients {}", waitingList)
         context.become(waitingForStateUpdate(snakes + (sender() -> s), foodList, newWaitingList), discardOld = true)
       }
 

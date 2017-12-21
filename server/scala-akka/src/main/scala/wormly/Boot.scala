@@ -26,7 +26,7 @@ object Boot extends App {
     pathSingleSlash {
       getFromResource("index.html")
     } ~
-      path("ws") {
+      path("wormly") {
         handleWebSocketMessages(ConnectionHandler.createActorHandlingFlow(gameCycle, sequentialOperationsManager))
       }
   }

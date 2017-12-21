@@ -10,6 +10,7 @@ import scala.language.postfixOps
 object GameCycle {
   case object Tick
   case object ManageMe
+  case object UnmanageMe
 
   def props(): Props = Props(new GameCycle())
 }
@@ -32,8 +33,13 @@ class GameCycle extends Actor with ActorLogging {
       context.become(receiveWithClients(clients + sender()))
       context.watch(sender())
 
+    case UnmanageMe =>
+      context.become(receiveWithClients(clients - sender()))
+      context.unwatch(sender())
+
     case Terminated(client) =>
       context.become(receiveWithClients(clients - client))
+      context.unwatch(client)
 
     case other =>
       log.error("Unexpected message {} from {}", other, sender())

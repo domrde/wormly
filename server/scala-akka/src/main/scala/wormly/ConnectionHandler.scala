@@ -5,21 +5,20 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
-import upickle.default.{read, write}
+import upickle.default._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 object ConnectionHandler {
-
   sealed trait WsIncoming
   case class StartGameIn(name: String) extends WsIncoming
-  case class CursorPositionIn(angle: Double) extends WsIncoming
+  case class CursorPositionIn(angle: Double) extends WsIncoming // radians
 
   sealed trait WsOutgoing
-  case class FoodOut(y: Double, x: Double, color: String, value: Double)
-  case class SnakePartOut(y: Double, x: Double, r: Double, color: String)
-  case class VisibleObjectsOut(snakeParts: List[SnakePartOut], food: List[FoodOut]) extends WsOutgoing
+  case class FoodOut(y: Double, x: Double, d: Double, color: String)
+  case class SnakePartOut(y: Double, x: Double, d: Double, color: String)
+  case class VisibleObjectsOut(snakeParts: List[SnakePartOut], food: List[FoodOut], offsetY: Double, offsetX: Double) extends WsOutgoing
   case class CollisionOut() extends WsOutgoing
 
   def createActorHandlingFlow(gameCycle: ActorRef, sequentialOperationsManager: ActorRef)
