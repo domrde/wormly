@@ -99,7 +99,7 @@ class SequentialOperationsManager extends Actor with ActorLogging {
   def generateFoodForSnakePart(deadSnakePart: Snake.SnakePart, size: Double, color: Color): List[Food] = {
     val lowerBound = deadSnakePart.y - size / 2.0
     val leftBound = deadSnakePart.x - size / 2.0
-    (1 until size.round).map { _ =>
+    (1 until size.toInt).map { _ =>
       Food(lowerBound + Random.nextInt(size.toInt), leftBound + Random.nextInt(size.toInt), color, Random.nextDouble())
     }.toList
   }

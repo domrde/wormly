@@ -1,7 +1,9 @@
 package wormly
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
+import wormly.Boot.system
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -19,6 +21,7 @@ class GameCycle extends Actor with ActorLogging {
   private val config = context.system.settings.config
   private val timeout = config.getInt("application.game-cycle-timeout-millis")
 
+  implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   context.system.scheduler.schedule(0 millis, timeout millis, self, Tick)
 
   def receiveWithClients(clients: Set[ActorRef]): Receive = {

@@ -22,8 +22,13 @@ object Boot extends App {
   val gameCycle = system.actorOf(GameCycle.props())
   val sequentialOperationsManager = system.actorOf(SequentialOperationsManager.props())
 
-  val route: Route = path("ws") {
-    handleWebSocketMessages(ConnectionHandler.createActorHandlingFlow(gameCycle, sequentialOperationsManager))
+  val route: Route = {
+    pathSingleSlash {
+      getFromResource("index.html")
+    } ~
+      path("ws") {
+        handleWebSocketMessages(ConnectionHandler.createActorHandlingFlow(gameCycle, sequentialOperationsManager))
+      }
   }
 
   val bindingFuture = Http().bindAndHandle(route, interface, port)
