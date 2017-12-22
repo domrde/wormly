@@ -13,17 +13,18 @@ import scala.util.Try
 object ConnectionHandler {
   sealed trait WsIncoming
   case class StartGameIn(name: String) extends WsIncoming
+  case class CanvasSize(height: Double, width: Double) extends WsIncoming
   case class CursorPositionIn(angle: Double) extends WsIncoming // radians
 
   sealed trait WsOutgoing
   case class FoodOut(y: Double, x: Double, d: Double, color: String)
   case class SnakePartOut(y: Double, x: Double, d: Double, color: String)
-  case class VisibleObjectsOut(snakeParts: List[SnakePartOut], food: List[FoodOut], offsetY: Double, offsetX: Double) extends WsOutgoing
+  case class VisibleObjectsOut(snakeParts: List[SnakePartOut], food: List[FoodOut], y: Double, x: Double) extends WsOutgoing
   case class CollisionOut() extends WsOutgoing
 
   def createActorHandlingFlow(gameCycle: ActorRef, sequentialOperationsManager: ActorRef)
                              (implicit system: ActorSystem, materializer: ActorMaterializer, ec: ExecutionContext): Flow[Message, Message, Any] = {
-    val gameClient = system.actorOf(GameClient.props(gameCycle, sequentialOperationsManager))
+    val gameClient = system.actorOf(GameClient.props(gameCycle, sequentialOperationsManager), Utils.actorName(GameClient.getClass))
 
     val incomingMessages: Sink[Message, NotUsed] =
       Flow[Message].map {

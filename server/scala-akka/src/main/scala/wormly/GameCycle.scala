@@ -1,7 +1,6 @@
 package wormly
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
-import wormly.Boot.system
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._

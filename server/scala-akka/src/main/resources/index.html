@@ -16,20 +16,27 @@
         context.fillRect(0, 0, canvas.width, canvas.height)
     }
 
-    function drawObjects(canvas, snakePartsList, offsetY, offsetX) {
+    function drawObjects(canvas, objectsList) {
         const context = canvas.getContext("2d");
-        _.each(snakePartsList, function(part) {
-            const diam = canvas.height / 20.0;
-            const y = (diam / part.d) * (part.y - offsetY);
-            const x = (diam / part.d) * (part.x - offsetX);
-            context.fillStyle = part.color;
+        for (var i = objectsList.length - 1; i >= 0; i--) {
+            const object = objectsList[i];
+            context.fillStyle = object.color;
+            context.strokeStyle = "black";
             context.beginPath();
-            context.arc(x + canvas.width / 2.0, y + canvas.height / 2.0, diam / 2.0, 0, 2.0 * Math.PI);
+            context.arc(object.x, object.y, object.d / 2.0, 0, 2.0 * Math.PI);
             context.fill();
-        });
+            context.stroke();
+        }
     }
 
-    window.onload = function() {
+    function writeCoordinates(canvas, y, x) {
+        const context = canvas.getContext("2d");
+        context.fillStyle = "black";
+        context.font = "12px Arial";
+        context.fillText("(" + Math.round(y) + ", " + Math.round(x) + ")", 10, 15);
+    }
+
+    window.onload = function () {
         const ws = new WebSocket("ws://" + window.location.host + "/wormly");
         const canvas = document.createElement('canvas');
 
@@ -42,9 +49,25 @@
             body.appendChild(canvas);
 
             ws.send(JSON.stringify({
+                height: canvas.height,
+                width: canvas.width,
+                $type: "wormly.ConnectionHandler.CanvasSize"
+            }));
+
+            ws.send(JSON.stringify({
                 name: "unused",
                 $type: "wormly.ConnectionHandler.StartGameIn"
             }));
+
+            window.addEventListener('resize', _.throttle(function () {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                ws.send(JSON.stringify({
+                    height: canvas.height,
+                    width: canvas.width,
+                    $type: "wormly.ConnectionHandler.CanvasSize"
+                }));
+            }, 50));
         };
 
         canvas.onmousemove = _.throttle(function (ev) {
@@ -70,9 +93,11 @@
             const parsedData = JSON.parse(ev.data);
             switch (parsedData.$type) {
                 case "wormly.ConnectionHandler.VisibleObjectsOut":
+                    console.log(parsedData);
                     clearCanvas(canvas);
-                    drawObjects(canvas, parsedData.food, parsedData.offsetY, parsedData.offsetX);
-                    drawObjects(canvas, parsedData.snakeParts, parsedData.offsetY, parsedData.offsetX);
+                    drawObjects(canvas, parsedData.food);
+                    drawObjects(canvas, parsedData.snakeParts);
+                    writeCoordinates(canvas, parsedData.y, parsedData.x);
                     break;
 
                 case "wormly.ConnectionHandler.CollisionOut":

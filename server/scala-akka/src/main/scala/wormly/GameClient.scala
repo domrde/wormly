@@ -14,28 +14,28 @@ object GameClient {
 class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) extends Actor with ActorLogging {
   import GameClient._
 
-  def mapVisibleObjects(in: SequentialOperationsManager.VisibleObjects): ConnectionHandler.VisibleObjectsOut = {
-    ConnectionHandler.VisibleObjectsOut(in.snakeParts.flatMap(mapSnakePart), in.food.map(mapFood), in.offsetY, in.offsetX)
-  }
-
-  def mapFood(in: SequentialOperationsManager.Food): ConnectionHandler.FoodOut = {
-    ConnectionHandler.FoodOut(in.y, in.x, in.d, Utils.colorToString(in.color))
-  }
-
-  def mapSnakePart(in: SequentialOperationsManager.VisibleParts): List[ConnectionHandler.SnakePartOut] = {
-    in.snakeParts.foldLeft((in.color.darker(), List.empty[ConnectionHandler.SnakePartOut])) { case ((color, accumulator), part) =>
-      val brighterColor = color.brighter()
-      (brighterColor, ConnectionHandler.SnakePartOut(part.y, part.x, in.size, Utils.colorToString(brighterColor)) :: accumulator)
-    }._2
-  }
+  private val outputDataMapper = context.actorOf(OutputDataMapper.props(), Utils.actorName(OutputDataMapper.getClass))
 
   override def receive: Receive = receiveWithNoOutput
 
-  def receiveGameStarted(snakeState: ActorRef, output: ActorRef): Receive = {
+  def snakeDying(snakeState: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
+    case Terminated(target) if target == snakeState =>
+      log.debug("Terminated: {}", target)
+      output ! ConnectionHandler.CollisionOut()
+      gameCycle ! GameCycle.UnmanageMe
+      context.unwatch(target)
+      context.become(receiveGameNotStarted(output, canvasSize), discardOld = true)
+
+    case other =>
+  }
+
+  def receiveGameStarted(snakeState: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case GameCycle.Tick =>
       log.debug("Tick. Snake update")
       snakeState ! Snake.Update
 
+
+    // --------- Sequential search of collisions with snakes and food ---------
     case s @ Snake.SnakeState(_, _, _) =>
       log.debug("Snake state updated: {}", s)
       sequentialOperationsManager ! s
@@ -43,48 +43,75 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
     case SequentialOperationsManager.Collision =>
       log.debug("Collision")
       snakeState ! PoisonPill
+      context.become(snakeDying(snakeState, output, canvasSize))
 
     case SequentialOperationsManager.Feeding(value) =>
       log.debug("Feeding for {}", value)
       snakeState ! Snake.IncreaseSize(value)
 
-    case vo @ SequentialOperationsManager.VisibleObjects(_, _, _, _) =>
-      log.debug("Visible objects: {}", vo)
-      output ! mapVisibleObjects(vo)
 
+    // --------- Prepared output data filtering and mapping -------------------
+    case SequentialOperationsManager.SequentiallyProcessedObjects(parts, food) =>
+      log.debug("Sequentially processed objects {}, {}", parts, food)
+      outputDataMapper ! OutputDataMapper.FilterVisibleObjects(parts, food, canvasSize)
+
+    case vo @ ConnectionHandler.VisibleObjectsOut(_, _, _, _) =>
+      log.debug("Visible objects: {}", vo)
+      output ! vo
+
+
+    // --------- User input ---------------------------------------------------
     case ConnectionHandler.CursorPositionIn(angle) =>
       log.debug("CursorPositionIn: {}", angle)
       snakeState ! Snake.ChangeAngle(angle)
 
+    case c @ ConnectionHandler.CanvasSize(_, _) =>
+      context.become(receiveGameStarted(snakeState, output, c), discardOld = true)
+
+
+    // --------- Created actors control ---------------------------------------
     case Terminated(target) if target == snakeState =>
       log.debug("Terminated: {}", target)
       output ! ConnectionHandler.CollisionOut()
       gameCycle ! GameCycle.UnmanageMe
       context.unwatch(target)
-      context.become(receiveGameNotStarted(output), discardOld = true)
+      context.become(receiveGameNotStarted(output, canvasSize), discardOld = true)
 
     case other =>
-      log.error("Unexpected message {} from {}", other, sender())
+      log.error("Unexpected message {} from {}. receiveGameStarted", other, sender())
   }
 
-  def receiveGameNotStarted(output: ActorRef): Receive = {
+  def receiveGameNotStarted(output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case ConnectionHandler.StartGameIn(_) =>
       log.debug("Starting game")
-      val snakeState = context.actorOf(Snake.props())
+      val snakeState = context.actorOf(Snake.props(), Utils.actorName(Snake.getClass))
       gameCycle ! GameCycle.ManageMe
       sequentialOperationsManager ! SequentialOperationsManager.NewSnake
       context.watch(snakeState)
-      context.become(receiveGameStarted(snakeState, output), discardOld = true)
+      context.become(receiveGameStarted(snakeState, output, canvasSize), discardOld = true)
+
+    case ConnectionHandler.CursorPositionIn(_) =>
+
+    case c @ ConnectionHandler.CanvasSize(_, _) =>
+      context.become(receiveGameNotStarted(output, c), discardOld = true)
 
     case other =>
-      log.error("Unexpected message {} from {}", other, sender())
+      log.error("Unexpected message {} from {}. receiveGameNotStarted", other, sender())
+  }
+
+  def receiveNoCanvasSize(output: ActorRef): Receive = {
+    case c @ ConnectionHandler.CanvasSize(_, _) =>
+      context.become(receiveGameNotStarted(output, c), discardOld = true)
+
+    case other =>
+      log.error("Unexpected message {} from {}. receiveNoCanvasSize", other, sender())
   }
 
   val receiveWithNoOutput: Receive = {
     case OutputActor(outputActor) =>
-      context.become(receiveGameNotStarted(outputActor), discardOld = true)
+      context.become(receiveNoCanvasSize(outputActor), discardOld = true)
 
     case other =>
-      log.error("Unexpected message {} from {}", other, sender())
+      log.error("Unexpected message {} from {}. receiveWithNoOutput", other, sender())
   }
 }

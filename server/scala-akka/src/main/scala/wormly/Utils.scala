@@ -14,4 +14,8 @@ object Utils {
     s"rgb(${color.getRed},${color.getGreen},${color.getBlue})"
   }
 
+  def actorName(clazz: Class[_]): String = {
+    clazz.getSimpleName + Random.nextLong()
+  }
+
 }

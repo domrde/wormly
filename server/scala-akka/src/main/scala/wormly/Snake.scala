@@ -18,8 +18,9 @@ object Snake {
   def props(): Props = Props(new Snake())
 
   def randomCoordinate(min: Int, max: Int): Double = {
-    val delta = max - min
-    Random.nextInt(delta / 2) + (delta / 4)
+//    val delta = max - min
+//    Random.nextDouble() % (delta * 0.8) + (delta * 0.2)
+    Random.nextInt(max - min) + min
   }
 }
 
@@ -28,12 +29,12 @@ class Snake() extends Actor with ActorLogging {
   import Snake._
 
   private val config = context.system.settings.config
-  private val fieldHeight = config.getInt("application.game-field-height")
-  private val fieldWidth = config.getInt("application.game-field-width")
-  private val initialPartSize = config.getInt("application.initial-snake-part-size")
-  private val maximumPartSize = config.getInt("application.maximum-snake-part-size")
-  private val initialLength = config.getInt("application.initial-snake-length")
-  private val distanceBetweenParts = config.getDouble("application.distance-between-parts")
+  private val fieldHeight = config.getInt("application.game-field.height")
+  private val fieldWidth = config.getInt("application.game-field.width")
+  private val initialPartSize = config.getInt("application.snake.initial-part-diameter")
+  private val maximumPartSize = config.getInt("application.snake.maximum-part-diameter")
+  private val distanceBetweenParts = config.getDouble("application.snake.distance-between-parts")
+  private val initialLength = config.getInt("application.snake.initial-length")
 
   private val headColor: Color = Utils.randomColor()
 

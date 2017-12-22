@@ -19,8 +19,9 @@ object Boot extends App {
   val interface = config.getString("application.http-binding.address")
   val port = config.getInt("application.http-binding.port")
 
-  val gameCycle = system.actorOf(GameCycle.props())
-  val sequentialOperationsManager = system.actorOf(SequentialOperationsManager.props())
+  val gameCycle = system.actorOf(GameCycle.props(), Utils.actorName(GameCycle.getClass))
+  val sequentialOperationsManager = system.actorOf(SequentialOperationsManager.props(), Utils.actorName(SequentialOperationsManager.getClass))
+  val testSnakes = system.actorOf(TestSnakes.props(gameCycle, sequentialOperationsManager), Utils.actorName(TestSnakes.getClass))
 
   val route: Route = {
     pathSingleSlash {
