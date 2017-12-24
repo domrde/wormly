@@ -5,7 +5,10 @@ import java.awt.Color
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
 import wormly.Snake.{SnakePart, SnakeState}
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.util.Random
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 object SequentialOperationsManager {
 
@@ -17,7 +20,9 @@ object SequentialOperationsManager {
 
   case class Feeding(foodValue: Double)
 
-  case class SequentiallyProcessedObjects(snakes: Map[ActorRef, SnakeState], foodList: List[Food])
+  case class SequentiallyProcessedObjects(snakes: Map[ActorRef, SnakeState], food: Set[Food])
+
+  case object PrintStatistics
 
   def props(): Props = Props(new SequentialOperationsManager())
 }
@@ -33,8 +38,15 @@ class SequentialOperationsManager extends Actor with ActorLogging {
   private val fieldWidth = config.getInt("application.game-field.width")
   private val collisionEnabled = config.getBoolean("application.test.collision")
 
+  implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
+  context.system.scheduler.schedule(0 millis, 500 millis, self, PrintStatistics)
+
   def areCollide(partA: SnakePart, sizeA: Double, partB: SnakePart, sizeB: Double): Boolean = {
+    if (collisionEnabled) {
     areCollide(partA.x, partA.y, sizeA / 2.0, partB.x, partB.y, sizeB / 2.0)
+    } else {
+      false
+    }
   }
 
   def areCollide(partA: SnakePart, sizeA: Double, food: Food): Boolean = {
@@ -57,40 +69,28 @@ class SequentialOperationsManager extends Actor with ActorLogging {
     }
   }
 
-  def findEatenFood(snakes: Map[ActorRef, SnakeState], food: List[Food]): Map[ActorRef, Food] = {
+  def findEatenFood(snakes: Map[ActorRef, SnakeState], food: Set[Food]): Map[ActorRef, Food] = {
     snakes.flatMap { case (actor, snakeA) =>
       food.filter { food => areCollide(snakeA.snakeParts.head, snakeA.size, food) }.map(eatenFood => (actor, eatenFood))
     }
   }
 
-  def generateFoodForSnakePart(deadSnakePart: Snake.SnakePart, size: Double, color: Color): List[Food] = {
-    val lowerBound = deadSnakePart.y - size / 2.0
-    val leftBound = deadSnakePart.x - size / 2.0
-    (1 until size.toInt).map { _ =>
+  def requestFoodGenerationFromDeadSnakes(collidingSnakes: Map[ActorRef, SnakeState]): Unit =
+    collidingSnakes.foreach { case (_, snake) =>
+      context.actorOf(FoodFromDeadSnakeGenerator.props(snake))
+    }
+
+  def generateRandomFood(snakesAmount: Int): Set[Food] = {
+    (1 to snakesAmount).map { _ =>
       val value = Random.nextDouble()
       val diam = value * foodValueToDiameterCoefficient
-      Food(lowerBound + Random.nextInt(size.toInt), leftBound + Random.nextInt(size.toInt), color, value, diam)
-    }.toList
+      Food(Random.nextInt(fieldHeight), Random.nextInt(fieldWidth), Utils.randomColor(), value, diam)
+    }.toSet
   }
 
-  def generateFood(collidingSnakes: Map[ActorRef, SnakeState], amountToGenerate: Int): List[Food] = {
-    collidingSnakes.flatMap { case (_, snake) =>
-      snake.snakeParts.flatMap { part =>
-        generateFoodForSnakePart(part, snake.size, snake.color)
-      }
-    } ++
-      (1 to amountToGenerate).map { _ =>
-        val value = Random.nextDouble()
-        val diam = value * foodValueToDiameterCoefficient
-        Food(Random.nextInt(fieldHeight), Random.nextInt(fieldWidth), Utils.randomColor(), value, diam)
-      }
-  }.toList
+  override def receive: Receive = waitingForStateUpdate(Map.empty, generateRandomFood(initialAmountOfFood), Set.empty)
 
-  override def receive: Receive = {
-    waitingForStateUpdate(Map.empty, generateFood(Map.empty, initialAmountOfFood), Set.empty)
-  }
-
-  def waitingForStateUpdate(snakes: Map[ActorRef, SnakeState], foodList: List[Food], waitingList: Set[ActorRef]): Receive = {
+  def waitingForStateUpdate(snakes: Map[ActorRef, SnakeState], foodSet: Set[Food], waitingList: Set[ActorRef]): Receive = {
     case NewSnake =>
       log.debug("New snake created {}", sender())
       context.watch(sender())
@@ -98,27 +98,33 @@ class SequentialOperationsManager extends Actor with ActorLogging {
     case Terminated(target) =>
       log.debug("Snake terminated {}", target)
       context.unwatch(target)
-      context.become(waitingForStateUpdate(snakes - target, foodList, waitingList - target), discardOld = true)
+      context.become(waitingForStateUpdate(snakes - target, foodSet, waitingList - target), discardOld = true)
 
-    case s@Snake.SnakeState(_, _, _) =>
+    case s @ Snake.SnakeState(_, _, _) =>
       val newWaitingList = waitingList - sender()
       if (newWaitingList.isEmpty) {
         log.debug("Snake state updated. Calculating client data")
         val collidingSnakes = findCollidingSnakes(snakes)
         collidingSnakes.keys.foreach(_ ! Collision)
-
-        val eatenFood = findEatenFood(snakes, foodList)
-        eatenFood.foreach { case (actor, food) => actor ! Feeding(food.value) }
-
         val newSnakes = (snakes + (sender() -> s)) -- collidingSnakes.keys
-        val newFood = generateFood(collidingSnakes, eatenFood.size)
+
+        val eatenFood = findEatenFood(snakes, foodSet)
+        eatenFood.foreach { case (actor, food) => actor ! Feeding(food.value) }
+        val newFood = foodSet -- eatenFood.values
+        requestFoodGenerationFromDeadSnakes(collidingSnakes)
 
         context.become(waitingForStateUpdate(newSnakes, newFood, newSnakes.keySet), discardOld = true)
         newSnakes.keys.foreach(_ ! SequentiallyProcessedObjects(newSnakes, newFood))
       } else {
         log.debug("Snake state updated. Waiting for clients {}", waitingList)
-        context.become(waitingForStateUpdate(snakes + (sender() -> s), foodList, newWaitingList), discardOld = true)
+        context.become(waitingForStateUpdate(snakes + (sender() -> s), foodSet, newWaitingList), discardOld = true)
       }
+
+    case FoodFromDeadSnakeGenerator.GeneratedFood(food) =>
+      context.become(waitingForStateUpdate(snakes, foodSet ++ food, waitingList), discardOld = true)
+
+    case PrintStatistics =>
+      log.info(s"Snakes amount: ${snakes.size}, food amount: ${foodSet.size}")
 
     case other =>
       log.error("Unexpected message {} from {}", other, sender())

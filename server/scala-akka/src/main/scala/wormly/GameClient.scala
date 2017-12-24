@@ -55,7 +55,7 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
       log.debug("Sequentially processed objects {}, {}", parts, food)
       outputDataMapper ! OutputDataMapper.FilterVisibleObjects(parts, food, canvasSize)
 
-    case vo @ ConnectionHandler.VisibleObjectsOut(_, _, _, _) =>
+    case vo @ ConnectionHandler.VisibleObjectsOut(_, _, _, _, _, _) =>
       log.debug("Visible objects: {}", vo)
       output ! vo
 
@@ -89,6 +89,9 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
       sequentialOperationsManager ! SequentialOperationsManager.NewSnake
       context.watch(snakeState)
       context.become(receiveGameStarted(snakeState, output, canvasSize), discardOld = true)
+
+    case SequentialOperationsManager.SequentiallyProcessedObjects(_, _) =>
+      // todo: prevent sending of this message
 
     case ConnectionHandler.CursorPositionIn(_) =>
 

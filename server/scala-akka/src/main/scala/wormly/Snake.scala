@@ -67,7 +67,7 @@ class Snake() extends Actor with ActorLogging {
       log.debug("Increasing size by {}", foodValue)
       //todo: grow snake not only larger but longer
       if (size < maximumPartSize) {
-        context.become(receiveWithState(angle, size + foodValue, snakeParts), discardOld = true)
+        context.become(receiveWithState(angle, size + foodValue / size, snakeParts), discardOld = true)
       }
 
     case Update =>

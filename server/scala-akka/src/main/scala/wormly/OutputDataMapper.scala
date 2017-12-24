@@ -9,18 +9,22 @@ import wormly.Snake.{SnakePart, SnakeState}
 
 object OutputDataMapper {
 
-  case class FilterVisibleObjects(snakes: Map[ActorRef, SnakeState], foodList: List[Food], canvasSize: CanvasSize)
+  case class FilterVisibleObjects(snakes: Map[ActorRef, SnakeState], food: Set[Food], canvasSize: CanvasSize)
+
   case class ConversionInfo(offsetY: Double, offsetX: Double,
                             canvasHeight: Double, canvasWidth: Double,
                             sizeMultiplier: Double,
                             upperBound: Double, leftBound: Double, lowerBound: Double, rightBound: Double)
+
   case class VisibleParts(snakeParts: List[SnakePart], size: Double, color: Color)
+
   case class VisibleObjects(snakeParts: List[VisibleParts], food: List[Food])
 
   def props(): Props = Props(new OutputDataMapper())
 }
 
 class OutputDataMapper extends Actor with ActorLogging {
+
   import OutputDataMapper._
 
   private val config = context.system.settings.config
@@ -41,11 +45,11 @@ class OutputDataMapper extends Actor with ActorLogging {
     )
   }
 
-  def mapToClientCoordinates(y: Double, x: Double, d: Double, info: ConversionInfo): (Double, Double, Double) = {
+  def mapToClientCoordinates(y: Double, x: Double, d: Double, info: ConversionInfo): (Int, Int, Int) = {
     val localY = info.sizeMultiplier * (y - info.offsetY) + info.canvasHeight / 2.0
     val localX = info.sizeMultiplier * (x - info.offsetX) + info.canvasWidth / 2.0
     val diam = d * info.sizeMultiplier
-    (localY, localX, diam)
+    (Math.round(localY).intValue(), Math.round(localX).intValue(), Math.round(diam).intValue())
   }
 
   def filterAndMapSnakes(snakes: Map[ActorRef, SnakeState], window: ConversionInfo): List[SnakePartOut] = {
@@ -61,8 +65,8 @@ class OutputDataMapper extends Actor with ActorLogging {
     }.toList
   }
 
-  def filterAndMapFood(foodList: List[Food], window: ConversionInfo): List[FoodOut] = {
-    foodList.filter { food =>
+  def filterAndMapFood(foodSet: Set[Food], window: ConversionInfo): Set[FoodOut] = {
+    foodSet.filter { food =>
       val radius = food.d / 2.0
       window.upperBound < food.y + radius && food.y - radius < window.lowerBound &&
         window.leftBound < food.x + radius && food.x - radius < window.rightBound
@@ -72,15 +76,34 @@ class OutputDataMapper extends Actor with ActorLogging {
     }
   }
 
+  def generateGrid(info: ConversionInfo): (List[Int], List[Int]) = {
+    (
+      (Math.round(info.leftBound) to Math.round(info.rightBound) by 1L)
+        .filter(i => i % 50 == 0)
+        .map(x => info.sizeMultiplier * (x - info.offsetX) + info.canvasWidth / 2.0)
+        .map(d => Math.round(d).intValue())
+        .toList,
+
+      (Math.round(info.upperBound) to Math.round(info.lowerBound) by 1L)
+        .filter(i => i % 50 == 0)
+        .map(y => info.sizeMultiplier * (y - info.offsetY) + info.canvasHeight / 2.0)
+        .map(d => Math.round(d).intValue())
+        .toList
+    )
+  }
+
   override def receive: Receive = {
-    case FilterVisibleObjects(snakes, foodList, canvasSize) =>
+    case FilterVisibleObjects(snakes, foodSet, canvasSize) =>
       val senderSnake = snakes(sender())
       val visibilityWindow = calculateVisibilityWindow(senderSnake.snakeParts.head, senderSnake.size, canvasSize)
+      val grid = generateGrid(visibilityWindow)
       sender() ! ConnectionHandler.VisibleObjectsOut(
         filterAndMapSnakes(snakes, visibilityWindow),
-        filterAndMapFood(foodList, visibilityWindow),
-        visibilityWindow.offsetY,
-        visibilityWindow.offsetX
+        filterAndMapFood(foodSet, visibilityWindow),
+        grid._1,
+        grid._2,
+        visibilityWindow.offsetY.toInt,
+        visibilityWindow.offsetX.toInt
       )
 
     case other =>

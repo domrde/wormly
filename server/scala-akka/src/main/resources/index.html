@@ -4,11 +4,20 @@
     <meta charset="UTF-8">
     <title>Wormly</title>
     <script src="http://underscorejs.org/underscore-min.js"></script>
+
+    <style type="text/css">
+        html, body {
+            width:  100%;
+            height: 100%;
+            margin: 0px;
+        }
+    </style>
 </head>
 <body>
 
 <script type="text/javascript">
-    const backgroundColor = "lightblue";
+    const backgroundColor = "#F3FFBD";
+    const gridColor = "#B2DBBF";
 
     function clearCanvas(canvas) {
         const context = canvas.getContext("2d");
@@ -22,6 +31,7 @@
             const object = objectsList[i];
             context.fillStyle = object.color;
             context.strokeStyle = "black";
+            context.lineWidth = 1;
             context.beginPath();
             context.arc(object.x, object.y, object.d / 2.0, 0, 2.0 * Math.PI);
             context.fill();
@@ -33,7 +43,30 @@
         const context = canvas.getContext("2d");
         context.fillStyle = "black";
         context.font = "12px Arial";
-        context.fillText("(" + Math.round(y) + ", " + Math.round(x) + ")", 10, 15);
+        context.fillText("(" + y + ", " + x + ")", 10, 15);
+    }
+
+    function drawLines(canvas, hor, ver) {
+        const context = canvas.getContext("2d");
+        context.strokeStyle = gridColor;
+        context.lineWidth = 10;
+        _.each(hor, function (e) {
+            context.moveTo(0, e);
+            context.lineTo(canvas.width, e);
+        });
+        _.each(ver, function (e) {
+            context.moveTo(e, 0);
+            context.lineTo(e, canvas.height);
+        });
+        context.stroke();
+    }
+
+    function draw(canvas, data) {
+        clearCanvas(canvas);
+        // drawLines(canvas, data.hor, data.ver);
+        drawObjects(canvas, data.food);
+        drawObjects(canvas, data.snakeParts);
+        writeCoordinates(canvas, data.y, data.x);
     }
 
     window.onload = function () {
@@ -43,7 +76,6 @@
         ws.onopen = function () {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            canvas.backgroundColor = "lightblue";
 
             const body = document.getElementsByTagName("body")[0];
             body.appendChild(canvas);
@@ -93,15 +125,16 @@
             const parsedData = JSON.parse(ev.data);
             switch (parsedData.$type) {
                 case "wormly.ConnectionHandler.VisibleObjectsOut":
-                    console.log(parsedData);
-                    clearCanvas(canvas);
-                    drawObjects(canvas, parsedData.food);
-                    drawObjects(canvas, parsedData.snakeParts);
-                    writeCoordinates(canvas, parsedData.y, parsedData.x);
+                    draw(canvas, parsedData);
                     break;
 
                 case "wormly.ConnectionHandler.CollisionOut":
-                    window.alert("Collision");
+                    clearCanvas(canvas);
+                    const context = canvas.getContext("2d");
+                    context.fillStyle = "black";
+                    context.textAlign = 'center';
+                    context.font = "60px Arial";
+                    context.fillText("Collision", canvas.width / 2.0, canvas.height / 2.0);
                     break;
 
                 default:
