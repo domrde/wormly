@@ -28,10 +28,12 @@ class TestSnakes(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
   def receiveWithTestSnakes(testSnakes: Set[ActorRef]): Receive = {
     case Terminated(target) =>
-      log.info("Resurrecting dummy")
       context.unwatch(target)
       val snake = createTestSnake()
       context.become(receiveWithTestSnakes((testSnakes - target) + snake), discardOld = true)
+
+    case other =>
+      log.error("Unexpected message {} from {}", other, sender())
   }
 }
 
@@ -63,7 +65,6 @@ class DummySnake(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
   override def receive: Receive = {
     case ConnectionHandler.CollisionOut() =>
-      log.info("Dummy collided")
       gameClient ! PoisonPill
       self ! PoisonPill
 
@@ -71,8 +72,8 @@ class DummySnake(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
       gameClient ! ConnectionHandler.CursorPositionIn(Random.nextInt(360))
 
     case ConnectionHandler.VisibleObjectsOut(_, food, _, _, y, x) =>
-      if (0 > y || y > fieldHeight ||
-        0 > x || x > fieldWidth) {
+      if (0 > y || y > fieldHeight + 50 ||
+        0 > x || x > fieldWidth + 50) {
         sender() ! PoisonPill
       } else if (food.nonEmpty) {
         val nearest = findNearestFood(food)

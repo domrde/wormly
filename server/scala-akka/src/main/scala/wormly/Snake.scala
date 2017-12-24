@@ -76,6 +76,11 @@ class Snake() extends Actor with ActorLogging {
       context.become(receiveWithState(angle, size, updatedState), discardOld = true)
       sender() ! SnakeState(updatedState, size, headColor)
 
+    case GameClient.MoveSnakeImmediately(y, x, a, s, parts) =>
+      val oppositeAngle = (a + 180) % 360
+      val snake = SnakePart(y, x) :: growParts(y, x, oppositeAngle, s, parts - 1)
+      context.become(receiveWithState(a, s, snake))
+
     case other =>
       log.error("Unexpected message {} from {}", other, sender())
   }

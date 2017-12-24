@@ -22,6 +22,7 @@ object Boot extends App {
   val gameCycle = system.actorOf(GameCycle.props(), Utils.actorName(GameCycle.getClass))
   val sequentialOperationsManager = system.actorOf(SequentialOperationsManager.props(), Utils.actorName(SequentialOperationsManager.getClass))
   val testSnakes = system.actorOf(TestSnakes.props(gameCycle, sequentialOperationsManager), Utils.actorName(TestSnakes.getClass))
+  val serviceSnakes = system.actorOf(ServiceSnakes.props(gameCycle, sequentialOperationsManager), Utils.actorName(ServiceSnakes.getClass))
 
   val route: Route = {
     pathSingleSlash {

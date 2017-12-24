@@ -6,6 +6,9 @@ object GameClient {
 
   case class OutputActor(outputActor: ActorRef)
 
+  // For service snakes
+  case class MoveSnakeImmediately(y: Double, x: Double, angle: Double, size: Double, parts: Int)
+
   def props(gameCycle: ActorRef, sequentialOperationsManager: ActorRef): Props =
     Props(new GameClient(gameCycle, sequentialOperationsManager))
 
@@ -67,6 +70,9 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
     case c @ ConnectionHandler.CanvasSize(_, _) =>
       context.become(receiveGameStarted(snakeState, output, c), discardOld = true)
+
+    case m @ MoveSnakeImmediately(_, _, _, _, _) =>
+      snakeState ! m
 
 
     // --------- Created actors control ---------------------------------------
