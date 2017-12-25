@@ -16,6 +16,7 @@
 <body>
 
 <script type="text/javascript">
+    var linesEnabled = false;
     const backgroundColor = "#F3FFBD";
     const gridColor = "#B2DBBF";
 
@@ -63,7 +64,9 @@
 
     function draw(canvas, data) {
         clearCanvas(canvas);
-        // drawLines(canvas, data.hor, data.ver);
+        if (linesEnabled) {
+            drawLines(canvas, data.hor, data.ver);
+        }
         drawObjects(canvas, data.food);
         drawObjects(canvas, data.wormParts);
         writeCoordinates(canvas, data.y, data.x);
@@ -135,6 +138,7 @@
                     context.textAlign = 'center';
                     context.font = "60px Arial";
                     context.fillText("Collision", canvas.width / 2.0, canvas.height / 2.0);
+                    context.fillText("Please, reload the page", canvas.width / 2.0, canvas.height / 2.0 + 70);
                     break;
 
                 default:
