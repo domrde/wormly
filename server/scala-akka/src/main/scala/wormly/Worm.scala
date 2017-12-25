@@ -34,6 +34,7 @@ class Worm() extends Actor with ActorLogging {
   private val maximumPartSize = config.getInt("application.worm.maximum-part-diameter")
   private val distanceBetweenParts = config.getDouble("application.worm.distance-between-parts")
   private val initialLength = config.getInt("application.worm.initial-length")
+  private val widthToLengthCoefficient = initialLength / initialPartSize
 
   private val headColor: Color = Utils.randomColor()
 
@@ -54,7 +55,10 @@ class Worm() extends Actor with ActorLogging {
   }
 
   def update(angle: Double, size: Double, wormParts: List[WormPart]): List[WormPart] = {
-    growParts(wormParts.head.y, wormParts.head.x, angle, size, 1).reverse ::: wormParts.dropRight(1)
+    val newPartsAmount = Math.ceil(size * widthToLengthCoefficient - wormParts.length).toInt
+    val body = if (newPartsAmount > 0) wormParts else wormParts.dropRight(1)
+    val head = growParts(wormParts.head.y, wormParts.head.x, angle, size, 1).reverse
+    head ::: body
   }
 
   def receiveWithState(angle: Double, size: Double, wormParts: List[WormPart]): Receive = {
@@ -62,7 +66,6 @@ class Worm() extends Actor with ActorLogging {
       context.become(receiveWithState(newAngle, size, wormParts), discardOld = true)
 
     case IncreaseSize(foodValue) =>
-      //todo: grow worm not only larger but longer
       if (size < maximumPartSize) {
         context.become(receiveWithState(angle, size + foodValue / size, wormParts), discardOld = true)
       }
