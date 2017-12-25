@@ -84,16 +84,16 @@ class FieldRangeWorm(gameCycle: ActorRef, sequentialOperationsManager: ActorRef)
       gameClient ! PoisonPill
       self ! PoisonPill
 
-    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - 0, x - 0) < 0.5 =>
+    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - 0, x - 0) < 15.0 =>
       sender() ! ConnectionHandler.CursorPositionIn(-90.toRadians)
 
-    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - fieldHeight, x - 0) < 0.5 =>
+    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - fieldHeight, x - 0) < 15.0 =>
       sender() ! ConnectionHandler.CursorPositionIn(180.toRadians)
 
-    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - fieldHeight, x - fieldWidth) < 0.5 =>
+    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - fieldHeight, x - fieldWidth) < 15.0 =>
       sender() ! ConnectionHandler.CursorPositionIn(90.toRadians)
 
-    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - 0, x - fieldWidth) < 0.5 =>
+    case ConnectionHandler.VisibleObjectsOut(_, _, _, _, y, x) if Math.hypot(y - 0, x - fieldWidth) < 15.0 =>
       sender() ! ConnectionHandler.CursorPositionIn(0.toRadians)
 
     case ConnectionHandler.VisibleObjectsOut(_, _, _, _, _, _) =>

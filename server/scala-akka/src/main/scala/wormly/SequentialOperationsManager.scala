@@ -80,8 +80,8 @@ class SequentialOperationsManager extends Actor with ActorLogging {
       context.actorOf(FoodFromDeadWormGenerator.props(worm))
     }
 
-  def generateRandomFood(wormsAmount: Int): Set[Food] = {
-    (1 to wormsAmount).map { _ =>
+  def generateRandomFood(amount: Int): Set[Food] = {
+    (1 to amount).map { _ =>
       val value = Random.nextDouble()
       val diam = value * foodValueToDiameterCoefficient
       Food(Random.nextInt(fieldHeight), Random.nextInt(fieldWidth), Utils.randomColor(), value, diam)
@@ -103,6 +103,8 @@ class SequentialOperationsManager extends Actor with ActorLogging {
 
     case s @ Worm.WormState(_, _, _) =>
       val newWaitingList = waitingList - sender()
+      val newFood = if (foodSet.size < initialAmountOfFood) foodSet ++ generateRandomFood(initialAmountOfFood) else foodSet
+
       if (newWaitingList.isEmpty) {
         val collidingWorms = findCollidingWorms(worms)
         collidingWorms.keys.foreach(_ ! Collision)
@@ -110,13 +112,13 @@ class SequentialOperationsManager extends Actor with ActorLogging {
 
         val eatenFood = findEatenFood(worms, foodSet)
         eatenFood.foreach { case (actor, food) => actor ! Feeding(food.value) }
-        val newFood = foodSet -- eatenFood.values
+        val foodWithoutEaten = newFood -- eatenFood.values
         requestFoodGenerationFromDeadWorms(collidingWorms)
 
-        context.become(waitingForStateUpdate(newWorms, newFood, newWorms.keySet), discardOld = true)
-        newWorms.keys.foreach(_ ! SequentiallyProcessedObjects(newWorms, newFood))
+        context.become(waitingForStateUpdate(newWorms, foodWithoutEaten, newWorms.keySet), discardOld = true)
+        newWorms.keys.foreach(_ ! SequentiallyProcessedObjects(newWorms, foodWithoutEaten))
       } else {
-        context.become(waitingForStateUpdate(worms + (sender() -> s), foodSet, newWaitingList), discardOld = true)
+        context.become(waitingForStateUpdate(worms + (sender() -> s), newFood, newWaitingList), discardOld = true)
       }
 
     case FoodFromDeadWormGenerator.GeneratedFood(food) =>
