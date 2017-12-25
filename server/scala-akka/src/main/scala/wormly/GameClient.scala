@@ -6,8 +6,8 @@ object GameClient {
 
   case class OutputActor(outputActor: ActorRef)
 
-  // For service snakes
-  case class MoveSnakeImmediately(y: Double, x: Double, angle: Double, size: Double, parts: Int)
+  // For service worms
+  case class MoveWormImmediately(y: Double, x: Double, angle: Double, size: Double, parts: Int)
 
   def props(gameCycle: ActorRef, sequentialOperationsManager: ActorRef): Props =
     Props(new GameClient(gameCycle, sequentialOperationsManager))
@@ -21,8 +21,8 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
   override def receive: Receive = receiveWithNoOutput
 
-  def snakeDying(snakeState: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
-    case Terminated(target) if target == snakeState =>
+  def wormDying(worm: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
+    case Terminated(target) if target == worm =>
       log.debug("Terminated: {}", target)
       output ! ConnectionHandler.CollisionOut()
       gameCycle ! GameCycle.UnmanageMe
@@ -32,25 +32,25 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
     case other =>
   }
 
-  def receiveGameStarted(snakeState: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
+  def receiveGameStarted(worm: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case GameCycle.Tick =>
-      log.debug("Tick. Snake update")
-      snakeState ! Snake.Update
+      log.debug("Tick. Worm update")
+      worm ! Worm.Update
 
 
-    // --------- Sequential search of collisions with snakes and food ---------
-    case s @ Snake.SnakeState(_, _, _) =>
-      log.debug("Snake state updated: {}", s)
+    // --------- Sequential search of collisions with worms and food ----------
+    case s @ Worm.WormState(_, _, _) =>
+      log.debug("Worm state updated: {}", s)
       sequentialOperationsManager ! s
 
     case SequentialOperationsManager.Collision =>
       log.debug("Collision")
-      snakeState ! PoisonPill
-      context.become(snakeDying(snakeState, output, canvasSize))
+      worm ! PoisonPill
+      context.become(wormDying(worm, output, canvasSize))
 
     case SequentialOperationsManager.Feeding(value) =>
       log.debug("Feeding for {}", value)
-      snakeState ! Snake.IncreaseSize(value)
+      worm ! Worm.IncreaseSize(value)
 
 
     // --------- Prepared output data filtering and mapping -------------------
@@ -66,17 +66,17 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
     // --------- User input ---------------------------------------------------
     case ConnectionHandler.CursorPositionIn(angle) =>
       log.debug("CursorPositionIn: {}", angle)
-      snakeState ! Snake.ChangeAngle(angle)
+      worm ! Worm.ChangeAngle(angle)
 
     case c @ ConnectionHandler.CanvasSize(_, _) =>
-      context.become(receiveGameStarted(snakeState, output, c), discardOld = true)
+      context.become(receiveGameStarted(worm, output, c), discardOld = true)
 
-    case m @ MoveSnakeImmediately(_, _, _, _, _) =>
-      snakeState ! m
+    case m @ MoveWormImmediately(_, _, _, _, _) =>
+      worm ! m
 
 
     // --------- Created actors control ---------------------------------------
-    case Terminated(target) if target == snakeState =>
+    case Terminated(target) if target == worm =>
       log.debug("Terminated: {}", target)
       output ! ConnectionHandler.CollisionOut()
       gameCycle ! GameCycle.UnmanageMe
@@ -90,11 +90,11 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
   def receiveGameNotStarted(output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case ConnectionHandler.StartGameIn(_) =>
       log.debug("Starting game")
-      val snakeState = context.actorOf(Snake.props(), Utils.actorName(Snake.getClass))
+      val worm = context.actorOf(Worm.props(), Utils.actorName(Worm.getClass))
       gameCycle ! GameCycle.ManageMe
-      sequentialOperationsManager ! SequentialOperationsManager.NewSnake
-      context.watch(snakeState)
-      context.become(receiveGameStarted(snakeState, output, canvasSize), discardOld = true)
+      sequentialOperationsManager ! SequentialOperationsManager.NewWorm
+      context.watch(worm)
+      context.become(receiveGameStarted(worm, output, canvasSize), discardOld = true)
 
     case SequentialOperationsManager.SequentiallyProcessedObjects(_, _) =>
       // todo: prevent sending of this message

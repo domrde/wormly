@@ -3,22 +3,22 @@ package wormly
 import java.awt.Color
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import wormly.ConnectionHandler.{CanvasSize, FoodOut, SnakePartOut}
+import wormly.ConnectionHandler.{CanvasSize, FoodOut, WormPartOut}
 import wormly.SequentialOperationsManager.Food
-import wormly.Snake.{SnakePart, SnakeState}
+import wormly.Worm.{WormPart, WormState}
 
 object OutputDataMapper {
 
-  case class FilterVisibleObjects(snakes: Map[ActorRef, SnakeState], food: Set[Food], canvasSize: CanvasSize)
+  case class FilterVisibleObjects(worms: Map[ActorRef, WormState], food: Set[Food], canvasSize: CanvasSize)
 
   case class ConversionInfo(offsetY: Double, offsetX: Double,
                             canvasHeight: Double, canvasWidth: Double,
                             sizeMultiplier: Double,
                             upperBound: Double, leftBound: Double, lowerBound: Double, rightBound: Double)
 
-  case class VisibleParts(snakeParts: List[SnakePart], size: Double, color: Color)
+  case class VisibleParts(wormParts: List[WormPart], size: Double, color: Color)
 
-  case class VisibleObjects(snakeParts: List[VisibleParts], food: List[Food])
+  case class VisibleObjects(wormParts: List[VisibleParts], food: List[Food])
 
   def props(): Props = Props(new OutputDataMapper())
 }
@@ -28,16 +28,16 @@ class OutputDataMapper extends Actor with ActorLogging {
   import OutputDataMapper._
 
   private val config = context.system.settings.config
-  private val snakeHeadsInCanvasHeight = config.getInt("application.game-field.snake-heads-in-canvas-height")
+  private val wormHeadsInCanvasHeight = config.getInt("application.game-field.worm-heads-in-canvas-height")
 
-  def calculateVisibilityWindow(head: SnakePart, size: Double, canvasSize: CanvasSize): ConversionInfo = {
-    val halfHeight = snakeHeadsInCanvasHeight / 2.0
+  def calculateVisibilityWindow(head: WormPart, size: Double, canvasSize: CanvasSize): ConversionInfo = {
+    val halfHeight = wormHeadsInCanvasHeight / 2.0
     ConversionInfo(
       offsetY = head.y,
       offsetX = head.x,
       canvasHeight = canvasSize.height,
       canvasWidth = canvasSize.width,
-      sizeMultiplier = canvasSize.height / snakeHeadsInCanvasHeight / size,
+      sizeMultiplier = canvasSize.height / wormHeadsInCanvasHeight / size,
       upperBound = head.y - halfHeight * size,
       leftBound = head.x - halfHeight * canvasSize.width / canvasSize.height * size,
       lowerBound = head.y + halfHeight * size,
@@ -52,15 +52,15 @@ class OutputDataMapper extends Actor with ActorLogging {
     (Math.round(localY).intValue(), Math.round(localX).intValue(), Math.round(diam).intValue())
   }
 
-  def filterAndMapSnakes(snakes: Map[ActorRef, SnakeState], window: ConversionInfo): List[SnakePartOut] = {
-    snakes.flatMap { case (_, snake) =>
-      snake.snakeParts.filter { part =>
-        val radius = snake.size / 2.0
+  def filterAndMapWorms(worms: Map[ActorRef, WormState], window: ConversionInfo): List[WormPartOut] = {
+    worms.flatMap { case (_, worm) =>
+      worm.parts.filter { part =>
+        val radius = worm.size / 2.0
         window.upperBound < part.y + radius && part.y - radius < window.lowerBound &&
           window.leftBound < part.x + radius && part.x - radius < window.rightBound
       }.map { part =>
-        val clientCoordinates = mapToClientCoordinates(part.y, part.x, snake.size, window)
-        SnakePartOut(clientCoordinates._1, clientCoordinates._2, clientCoordinates._3, Utils.colorToString(snake.color))
+        val clientCoordinates = mapToClientCoordinates(part.y, part.x, worm.size, window)
+        WormPartOut(clientCoordinates._1, clientCoordinates._2, clientCoordinates._3, Utils.colorToString(worm.color))
       }
     }.toList
   }
@@ -93,12 +93,12 @@ class OutputDataMapper extends Actor with ActorLogging {
   }
 
   override def receive: Receive = {
-    case FilterVisibleObjects(snakes, foodSet, canvasSize) =>
-      val senderSnake = snakes(sender())
-      val visibilityWindow = calculateVisibilityWindow(senderSnake.snakeParts.head, senderSnake.size, canvasSize)
+    case FilterVisibleObjects(worms, foodSet, canvasSize) =>
+      val senderWorm = worms(sender())
+      val visibilityWindow = calculateVisibilityWindow(senderWorm.parts.head, senderWorm.size, canvasSize)
       val grid = generateGrid(visibilityWindow)
       sender() ! ConnectionHandler.VisibleObjectsOut(
-        filterAndMapSnakes(snakes, visibilityWindow),
+        filterAndMapWorms(worms, visibilityWindow),
         filterAndMapFood(foodSet, visibilityWindow),
         grid._1,
         grid._2,

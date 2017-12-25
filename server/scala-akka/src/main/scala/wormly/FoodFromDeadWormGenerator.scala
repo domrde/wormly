@@ -4,19 +4,19 @@ import java.awt.Color
 
 import akka.actor.{Actor, ActorLogging, Props}
 import wormly.SequentialOperationsManager.Food
-import wormly.Snake.SnakeState
+import wormly.Worm.WormState
 
 import scala.util.Random
 
-object FoodFromDeadSnakeGenerator {
+object FoodFromDeadWormGenerator {
   case class GeneratedFood(food: Set[Food])
 
 
-  def props(deadSnake: SnakeState): Props = Props(new FoodFromDeadSnakeGenerator(deadSnake))
+  def props(deadWorm: WormState): Props = Props(new FoodFromDeadWormGenerator(deadWorm))
 }
 
-class FoodFromDeadSnakeGenerator(deadSnake: SnakeState) extends Actor with ActorLogging {
-  import FoodFromDeadSnakeGenerator._
+class FoodFromDeadWormGenerator(deadWorm: WormState) extends Actor with ActorLogging {
+  import FoodFromDeadWormGenerator._
 
   private val config = context.system.settings.config
   private val foodValueToDiameterCoefficient = config.getDouble("application.food.value-to-diameter-coefficient")
@@ -27,9 +27,9 @@ class FoodFromDeadSnakeGenerator(deadSnake: SnakeState) extends Actor with Actor
       log.error("Unexpected message {} from {}", other, sender())
   }
 
-  def generateFoodForSnakePart(deadSnakePart: Snake.SnakePart, size: Double, color: Color): Set[Food] = {
-    val lowerBound = deadSnakePart.y - size / 2.0
-    val leftBound = deadSnakePart.x - size / 2.0
+  def generateFoodForWormPart(deadWormPart: Worm.WormPart, size: Double, color: Color): Set[Food] = {
+    val lowerBound = deadWormPart.y - size / 2.0
+    val leftBound = deadWormPart.x - size / 2.0
 
     val value = 0.1 + (Math.min(size / 2.0, maxFoodValue) - 0.1) * Random.nextDouble()
     val diam = value * foodValueToDiameterCoefficient
@@ -37,8 +37,8 @@ class FoodFromDeadSnakeGenerator(deadSnake: SnakeState) extends Actor with Actor
   }
 
   context.parent ! GeneratedFood(
-    deadSnake.snakeParts.flatMap(part =>
-      generateFoodForSnakePart(part, deadSnake.size, deadSnake.color)
+    deadWorm.parts.flatMap(part =>
+      generateFoodForWormPart(part, deadWorm.size, deadWorm.color)
     ).toSet
   )
 }

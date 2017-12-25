@@ -18,8 +18,8 @@ object ConnectionHandler {
 
   sealed trait WsOutgoing
   case class FoodOut(y: Int, x: Int, d: Int, color: String)
-  case class SnakePartOut(y: Int, x: Int, d: Int, color: String)
-  case class VisibleObjectsOut(snakeParts: List[SnakePartOut], food: Set[FoodOut],
+  case class WormPartOut(y: Int, x: Int, d: Int, color: String)
+  case class VisibleObjectsOut(wormParts: List[WormPartOut], food: Set[FoodOut],
                                ver: List[Int], hor: List[Int], y: Int, x: Int) extends WsOutgoing
   case class CollisionOut() extends WsOutgoing
 

@@ -7,44 +7,44 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-object TestSnakes {
+object TestWorms {
   def props(gameCycle: ActorRef, sequentialOperationsManager: ActorRef): Props =
-    Props(new TestSnakes(gameCycle, sequentialOperationsManager))
+    Props(new TestWorms(gameCycle, sequentialOperationsManager))
 }
 
-class TestSnakes(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) extends Actor with ActorLogging {
+class TestWorms(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) extends Actor with ActorLogging {
   private val config = context.system.settings.config
-  private val testSnakesAmount = config.getInt("application.test.snakes-amount")
+  private val testWormsAmount = config.getInt("application.test.worms-amount")
 
-  override def receive: Receive = receiveWithTestSnakes(initTestSnakes())
+  override def receive: Receive = receiveWithTestWorms(initTestWorms())
 
-  def initTestSnakes(): Set[ActorRef] = (0 until testSnakesAmount).map(_ => createTestSnake()).toSet
+  def initTestWorms(): Set[ActorRef] = (0 until testWormsAmount).map(_ => createTestWorm()).toSet
 
-  def createTestSnake(): ActorRef = {
-    val snake = context.actorOf(DummySnake.props(gameCycle, sequentialOperationsManager), Utils.actorName(DummySnake.getClass))
-    context.watch(snake)
-    snake
+  def createTestWorm(): ActorRef = {
+    val worm = context.actorOf(DummyWorm.props(gameCycle, sequentialOperationsManager), Utils.actorName(DummyWorm.getClass))
+    context.watch(worm)
+    worm
   }
 
-  def receiveWithTestSnakes(testSnakes: Set[ActorRef]): Receive = {
+  def receiveWithTestWorms(testWorms: Set[ActorRef]): Receive = {
     case Terminated(target) =>
       context.unwatch(target)
-      val snake = createTestSnake()
-      context.become(receiveWithTestSnakes((testSnakes - target) + snake), discardOld = true)
+      val worm = createTestWorm()
+      context.become(receiveWithTestWorms((testWorms - target) + worm), discardOld = true)
 
     case other =>
       log.error("Unexpected message {} from {}", other, sender())
   }
 }
 
-object DummySnake {
+object DummyWorm {
   case object TurnRandomly
 
-  def props(gameCycle: ActorRef, sequentialOperationsManager: ActorRef): Props = Props(new DummySnake(gameCycle, sequentialOperationsManager))
+  def props(gameCycle: ActorRef, sequentialOperationsManager: ActorRef): Props = Props(new DummyWorm(gameCycle, sequentialOperationsManager))
 }
 
-class DummySnake(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) extends Actor with ActorLogging {
-  import DummySnake._
+class DummyWorm(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) extends Actor with ActorLogging {
+  import DummyWorm._
 
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
   context.system.scheduler.schedule(0 millis, 2 second, self, TurnRandomly)
@@ -72,8 +72,8 @@ class DummySnake(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
       gameClient ! ConnectionHandler.CursorPositionIn(Random.nextInt(360))
 
     case ConnectionHandler.VisibleObjectsOut(_, food, _, _, y, x) =>
-      if (0 > y || y > fieldHeight + 50 ||
-        0 > x || x > fieldWidth + 50) {
+      if (0 > y || y > fieldHeight - 50 ||
+        0 > x || x > fieldWidth - 50) {
         sender() ! PoisonPill
       } else if (food.nonEmpty) {
         val nearest = findNearestFood(food)
