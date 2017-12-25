@@ -92,18 +92,18 @@ class SequentialOperationsManager extends Actor with ActorLogging {
 
   def waitingForStateUpdate(worms: Map[ActorRef, WormState], foodSet: Set[Food], waitingList: Set[ActorRef]): Receive = {
     case NewWorm =>
-      log.debug("New worm created {}", sender())
+      log.debug(s"New game client created ${sender()}. Worms amount: ${worms.size}, food amount: ${foodSet.size}")
       context.watch(sender())
+      context.become(waitingForStateUpdate(worms, foodSet, waitingList + sender()), discardOld = true)
 
     case Terminated(target) =>
-      log.debug("Worms terminated {}", target)
+      log.debug(s"Game client terminated $target. Worms amount: ${worms.size}, food amount: ${foodSet.size}")
       context.unwatch(target)
       context.become(waitingForStateUpdate(worms - target, foodSet, waitingList - target), discardOld = true)
 
     case s @ Worm.WormState(_, _, _) =>
       val newWaitingList = waitingList - sender()
       if (newWaitingList.isEmpty) {
-        log.debug("Worms state updated. Calculating client data")
         val collidingWorms = findCollidingWorms(worms)
         collidingWorms.keys.foreach(_ ! Collision)
         val newWorms = (worms + (sender() -> s)) -- collidingWorms.keys
@@ -116,7 +116,6 @@ class SequentialOperationsManager extends Actor with ActorLogging {
         context.become(waitingForStateUpdate(newWorms, newFood, newWorms.keySet), discardOld = true)
         newWorms.keys.foreach(_ ! SequentiallyProcessedObjects(newWorms, newFood))
       } else {
-        log.debug("Worms state updated. Waiting for clients {}", waitingList)
         context.become(waitingForStateUpdate(worms + (sender() -> s), foodSet, newWaitingList), discardOld = true)
       }
 
@@ -124,7 +123,7 @@ class SequentialOperationsManager extends Actor with ActorLogging {
       context.become(waitingForStateUpdate(worms, foodSet ++ food, waitingList), discardOld = true)
 
     case PrintStatistics =>
-      log.info(s"Worms amount: ${worms.size}, food amount: ${foodSet.size}")
+      log.debug(s"Worms amount: ${worms.size}, food amount: ${foodSet.size}")
 
     case other =>
       log.error("Unexpected message {} from {}", other, sender())

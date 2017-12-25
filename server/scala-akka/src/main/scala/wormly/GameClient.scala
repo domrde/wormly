@@ -23,7 +23,7 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
   def wormDying(worm: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case Terminated(target) if target == worm =>
-      log.debug("Terminated: {}", target)
+      log.debug("Terminated worm {} in game {}", target, self)
       output ! ConnectionHandler.CollisionOut()
       gameCycle ! GameCycle.UnmanageMe
       context.unwatch(target)
@@ -34,38 +34,31 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
   def receiveGameStarted(worm: ActorRef, output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case GameCycle.Tick =>
-      log.debug("Tick. Worm update")
       worm ! Worm.Update
 
 
     // --------- Sequential search of collisions with worms and food ----------
     case s @ Worm.WormState(_, _, _) =>
-      log.debug("Worm state updated: {}", s)
       sequentialOperationsManager ! s
 
     case SequentialOperationsManager.Collision =>
-      log.debug("Collision")
       worm ! PoisonPill
       context.become(wormDying(worm, output, canvasSize))
 
     case SequentialOperationsManager.Feeding(value) =>
-      log.debug("Feeding for {}", value)
       worm ! Worm.IncreaseSize(value)
 
 
     // --------- Prepared output data filtering and mapping -------------------
     case SequentialOperationsManager.SequentiallyProcessedObjects(parts, food) =>
-      log.debug("Sequentially processed objects {}, {}", parts, food)
       outputDataMapper ! OutputDataMapper.FilterVisibleObjects(parts, food, canvasSize)
 
     case vo @ ConnectionHandler.VisibleObjectsOut(_, _, _, _, _, _) =>
-      log.debug("Visible objects: {}", vo)
       output ! vo
 
 
     // --------- User input ---------------------------------------------------
     case ConnectionHandler.CursorPositionIn(angle) =>
-      log.debug("CursorPositionIn: {}", angle)
       worm ! Worm.ChangeAngle(angle)
 
     case c @ ConnectionHandler.CanvasSize(_, _) =>
@@ -89,8 +82,8 @@ class GameClient(gameCycle: ActorRef, sequentialOperationsManager: ActorRef) ext
 
   def receiveGameNotStarted(output: ActorRef, canvasSize: ConnectionHandler.CanvasSize): Receive = {
     case ConnectionHandler.StartGameIn(_) =>
-      log.debug("Starting game")
       val worm = context.actorOf(Worm.props(), Utils.actorName(Worm.getClass))
+      log.debug("Starting game {} with worm {}", self, worm)
       gameCycle ! GameCycle.ManageMe
       sequentialOperationsManager ! SequentialOperationsManager.NewWorm
       context.watch(worm)

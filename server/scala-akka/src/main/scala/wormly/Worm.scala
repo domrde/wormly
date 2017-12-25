@@ -18,9 +18,8 @@ object Worm {
   def props(): Props = Props(new Worm())
 
   def randomCoordinate(min: Int, max: Int): Double = {
-//    val delta = max - min
-//    Random.nextDouble() % (delta * 0.8) + (delta * 0.2)
-    Random.nextInt(max - min) + min
+    val delta = max - min
+    delta * 0.2 + Random.nextInt(Math.ceil(delta * 0.6).toInt)
   }
 }
 
@@ -60,18 +59,15 @@ class Worm() extends Actor with ActorLogging {
 
   def receiveWithState(angle: Double, size: Double, wormParts: List[WormPart]): Receive = {
     case ChangeAngle(newAngle) =>
-      log.debug("Changing direction to {}", Math.toDegrees(newAngle))
       context.become(receiveWithState(newAngle, size, wormParts), discardOld = true)
 
     case IncreaseSize(foodValue) =>
-      log.debug("Increasing size by {}", foodValue)
       //todo: grow worm not only larger but longer
       if (size < maximumPartSize) {
         context.become(receiveWithState(angle, size + foodValue / size, wormParts), discardOld = true)
       }
 
     case Update =>
-      log.debug("Updating worm state")
       val updatedState = update(angle, size, wormParts)
       context.become(receiveWithState(angle, size, updatedState), discardOld = true)
       sender() ! WormState(updatedState, size, headColor)

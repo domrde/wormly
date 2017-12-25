@@ -22,7 +22,7 @@ class GameCycle extends Actor with ActorLogging {
   private val timeout = config.getInt("application.game-cycle-timeout-millis")
 
   implicit val executionContext: ExecutionContextExecutor = context.system.dispatcher
-  context.system.scheduler.schedule(0 millis, timeout millis, self, Tick)
+  context.system.scheduler.schedule(1 seconds, timeout millis, self, Tick)
 
   def receiveWithClients(clients: Set[ActorRef]): Receive = {
     case Tick =>

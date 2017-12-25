@@ -31,7 +31,8 @@ class FoodFromDeadWormGenerator(deadWorm: WormState) extends Actor with ActorLog
     val lowerBound = deadWormPart.y - size / 2.0
     val leftBound = deadWormPart.x - size / 2.0
 
-    val value = 0.1 + (Math.min(size / 2.0, maxFoodValue) - 0.1) * Random.nextDouble()
+    val maxPossibleFoodValueForPart = Math.min(size / foodValueToDiameterCoefficient, maxFoodValue)
+    val value = 0.01 + (maxPossibleFoodValueForPart - 0.01) * Random.nextDouble()
     val diam = value * foodValueToDiameterCoefficient
     Set(Food(lowerBound + Random.nextInt(size.toInt), leftBound + Random.nextInt(size.toInt), color, value, diam))
   }
