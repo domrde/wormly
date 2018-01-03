@@ -17,6 +17,7 @@
 
 <script type="text/javascript">
     var state = {};
+    var gameOver = false;
     const backgroundColor = "#F3FFBD";
     const gridColor = "#B2DBBF";
 
@@ -62,25 +63,39 @@
         context.stroke();
     }
 
+    function drawGameOver(canvas) {
+        const context = canvas.getContext("2d");
+        context.fillStyle = "black";
+        context.textAlign = 'center';
+        context.font = "60px Arial";
+        context.fillText("Collision", canvas.width / 2.0, canvas.height / 2.0);
+        context.fillText("Please, reload the page", canvas.width / 2.0, canvas.height / 2.0 + 70);
+    }
+
     function draw(canvas) {
         clearCanvas(canvas);
-        if (typeof state !== 'undefined') {
-            if (state.hasOwnProperty("hor") && state.hasOwnProperty("ver")) {
-                drawLines(canvas, state.hor, state.ver);
+
+        if (gameOver) {
+            drawGameOver(canvas);
+        } else {
+            if (typeof state !== 'undefined') {
+                if (state.hasOwnProperty("hor") && state.hasOwnProperty("ver")) {
+                    drawLines(canvas, state.hor, state.ver);
+                }
+                if (state.hasOwnProperty("food")) {
+                    drawObjects(canvas, state.food);
+                }
+                if (state.hasOwnProperty("wormParts")) {
+                    drawObjects(canvas, state.wormParts);
+                }
+                if (state.hasOwnProperty("y") && state.hasOwnProperty("x")) {
+                    writeCoordinates(canvas, state.y, state.x);
+                }
             }
-            if (state.hasOwnProperty("food")) {
-                drawObjects(canvas, state.food);
-            }
-            if (state.hasOwnProperty("wormParts")) {
-                drawObjects(canvas, state.wormParts);
-            }
-            if (state.hasOwnProperty("y") && state.hasOwnProperty("x")) {
-                writeCoordinates(canvas, state.y, state.x);
-            }
+            requestAnimationFrame(function () {
+                draw(canvas);
+            });
         }
-        requestAnimationFrame(function () {
-            draw(canvas);
-        });
     }
 
     window.onload = function () {
@@ -145,14 +160,7 @@
                     break;
 
                 case "wormly.ConnectionHandler.CollisionOut":
-                    state = {};
-                    clearCanvas(canvas);
-                    const context = canvas.getContext("2d");
-                    context.fillStyle = "black";
-                    context.textAlign = 'center';
-                    context.font = "60px Arial";
-                    context.fillText("Collision", canvas.width / 2.0, canvas.height / 2.0);
-                    context.fillText("Please, reload the page", canvas.width / 2.0, canvas.height / 2.0 + 70);
+                    gameOver = true;
                     break;
 
                 default:
