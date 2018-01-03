@@ -7,7 +7,7 @@
 
     <style type="text/css">
         html, body {
-            width:  100%;
+            width: 100%;
             height: 100%;
             margin: 0px;
         }
@@ -16,7 +16,8 @@
 <body>
 
 <script type="text/javascript">
-    var linesEnabled = false;
+    var state = {};
+    var linesEnabled = true;
     const backgroundColor = "#F3FFBD";
     const gridColor = "#B2DBBF";
 
@@ -62,14 +63,25 @@
         context.stroke();
     }
 
-    function draw(canvas, data) {
+    function draw(canvas) {
         clearCanvas(canvas);
-        if (linesEnabled) {
-            drawLines(canvas, data.hor, data.ver);
+        if (typeof state !== 'undefined') {
+            if (linesEnabled && state.hasOwnProperty("hor") && state.hasOwnProperty("ver")) {
+                drawLines(canvas, state.hor, state.ver);
+            }
+            if (state.hasOwnProperty("food")) {
+                drawObjects(canvas, state.food);
+            }
+            if (state.hasOwnProperty("wormParts")) {
+                drawObjects(canvas, state.wormParts);
+            }
+            if (state.hasOwnProperty("y") && state.hasOwnProperty("x")) {
+                writeCoordinates(canvas, state.y, state.x);
+            }
         }
-        drawObjects(canvas, data.food);
-        drawObjects(canvas, data.wormParts);
-        writeCoordinates(canvas, data.y, data.x);
+        requestAnimationFrame(function () {
+            draw(canvas);
+        });
     }
 
     window.onload = function () {
@@ -103,6 +115,8 @@
                     $type: "wormly.ConnectionHandler.CanvasSize"
                 }));
             }, 50));
+
+            draw(canvas);
         };
 
         canvas.onmousemove = _.throttle(function (ev) {
@@ -122,16 +136,17 @@
                 angle: angle,
                 $type: "wormly.ConnectionHandler.CursorPositionIn"
             }));
-        }, 50);
+        }, 25);
 
         ws.onmessage = function (ev) {
             const parsedData = JSON.parse(ev.data);
             switch (parsedData.$type) {
                 case "wormly.ConnectionHandler.VisibleObjectsOut":
-                    draw(canvas, parsedData);
+                    state = parsedData;
                     break;
 
                 case "wormly.ConnectionHandler.CollisionOut":
+                    state = {};
                     clearCanvas(canvas);
                     const context = canvas.getContext("2d");
                     context.fillStyle = "black";
