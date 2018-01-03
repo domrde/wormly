@@ -17,7 +17,6 @@
 
 <script type="text/javascript">
     var state = {};
-    var linesEnabled = true;
     const backgroundColor = "#F3FFBD";
     const gridColor = "#B2DBBF";
 
@@ -29,8 +28,7 @@
 
     function drawObjects(canvas, objectsList) {
         const context = canvas.getContext("2d");
-        for (var i = objectsList.length - 1; i >= 0; i--) {
-            const object = objectsList[i];
+        _.each(objectsList, function (object) {
             context.fillStyle = object.color;
             context.strokeStyle = "black";
             context.lineWidth = 1;
@@ -38,7 +36,7 @@
             context.arc(object.x, object.y, object.d / 2.0, 0, 2.0 * Math.PI);
             context.fill();
             context.stroke();
-        }
+        });
     }
 
     function writeCoordinates(canvas, y, x) {
@@ -52,6 +50,7 @@
         const context = canvas.getContext("2d");
         context.strokeStyle = gridColor;
         context.lineWidth = 10;
+        context.beginPath();
         _.each(hor, function (e) {
             context.moveTo(0, e);
             context.lineTo(canvas.width, e);
@@ -66,7 +65,7 @@
     function draw(canvas) {
         clearCanvas(canvas);
         if (typeof state !== 'undefined') {
-            if (linesEnabled && state.hasOwnProperty("hor") && state.hasOwnProperty("ver")) {
+            if (state.hasOwnProperty("hor") && state.hasOwnProperty("ver")) {
                 drawLines(canvas, state.hor, state.ver);
             }
             if (state.hasOwnProperty("food")) {
