@@ -45,11 +45,11 @@ class OutputDataMapper extends Actor with ActorLogging {
     )
   }
 
-  def mapToClientCoordinates(y: Double, x: Double, d: Double, info: ConversionInfo): (Int, Int, Int) = {
+  def mapToClientCoordinates(y: Double, x: Double, d: Double, info: ConversionInfo): (Double, Double, Double) = {
     val localY = info.sizeMultiplier * (y - info.offsetY) + info.canvasHeight / 2.0
     val localX = info.sizeMultiplier * (x - info.offsetX) + info.canvasWidth / 2.0
     val diam = d * info.sizeMultiplier
-    (Math.round(localY).intValue(), Math.round(localX).intValue(), Math.round(diam).intValue())
+    (localY, localX, diam)
   }
 
   def filterAndMapWorms(worms: Map[ActorRef, WormState], window: ConversionInfo): List[WormPartOut] = {
@@ -76,18 +76,16 @@ class OutputDataMapper extends Actor with ActorLogging {
     }
   }
 
-  def generateGrid(info: ConversionInfo): (List[Int], List[Int]) = {
+  def generateGrid(info: ConversionInfo): (List[Double], List[Double]) = {
     (
       (Math.round(info.leftBound) to Math.round(info.rightBound) by 1L)
         .filter(i => i % 50 == 0)
         .map(x => info.sizeMultiplier * (x - info.offsetX) + info.canvasWidth / 2.0)
-        .map(d => Math.round(d).intValue())
         .toList,
 
       (Math.round(info.upperBound) to Math.round(info.lowerBound) by 1L)
         .filter(i => i % 50 == 0)
         .map(y => info.sizeMultiplier * (y - info.offsetY) + info.canvasHeight / 2.0)
-        .map(d => Math.round(d).intValue())
         .toList
     )
   }

@@ -17,10 +17,10 @@ object ConnectionHandler {
   case class CursorPositionIn(angle: Double) extends WsIncoming // radians
 
   sealed trait WsOutgoing
-  case class FoodOut(y: Int, x: Int, d: Int, color: String)
-  case class WormPartOut(y: Int, x: Int, d: Int, color: String)
+  case class FoodOut(y: Double, x: Double, d: Double, color: String)
+  case class WormPartOut(y: Double, x: Double, d: Double, color: String)
   case class VisibleObjectsOut(wormParts: List[WormPartOut], food: Set[FoodOut],
-                               ver: List[Int], hor: List[Int], y: Int, x: Int) extends WsOutgoing
+                               ver: List[Double], hor: List[Double], y: Int, x: Int) extends WsOutgoing
   case class CollisionOut() extends WsOutgoing
 
   def createActorHandlingFlow(gameCycle: ActorRef, sequentialOperationsManager: ActorRef)
